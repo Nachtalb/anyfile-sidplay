@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Only apps signed with the same certificate (AnyFile) can bind the render service. -->
+    <permission
+        android:name="com.nachtalb.anyfilesidplay.permission.BIND_CONVERTER"
+        android:protectionLevel="signature" />
+
+    <application
+        android:allowBackup="false"
+        android:label="AnyFile SID"
+        android:hasCode="true"
+        android:extractNativeLibs="true">
+
+        <!-- The app's only component: headless, no launcher entry. AnyFile binds it by explicit component. -->
+        <service
+            android:name=".SidRenderService"
+            android:exported="true"
+            android:permission="com.nachtalb.anyfilesidplay.permission.BIND_CONVERTER">
+            <intent-filter>
+                <action android:name="com.nachtalb.anyfilesidplay.CONVERT" />
+            </intent-filter>
+        </service>
+
+    </application>
+
+</manifest>
