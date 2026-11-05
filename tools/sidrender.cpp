@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Host harness: sidrender <tune.sid> <out.wav> [subsong] [seconds]
+// Host harness: sidrender <tune.sid> <out.wav> [subsong] [seconds] [rate]
 // Builds with the same CMakeLists as the app (non-Android branch).
 #include <cstdio>
 #include <cstdlib>
@@ -14,12 +14,12 @@ static void le(std::ofstream& f, uint32_t v, int n) {
 }
 
 int main(int argc, char** argv) {
-    if (argc < 3) { std::fprintf(stderr, "usage: %s tune.sid out.wav [subsong] [seconds]\n", argv[0]); return 2; }
+    if (argc < 3) { std::fprintf(stderr, "usage: %s tune.sid out.wav [subsong] [seconds] [rate]\n", argv[0]); return 2; }
     std::ifstream in(argv[1], std::ios::binary);
     std::vector<uint8_t> data((std::istreambuf_iterator<char>(in)), {});
     unsigned sub = argc > 3 ? std::atoi(argv[3]) : 0;
     unsigned secs = argc > 4 ? std::atoi(argv[4]) : 10;
-    const unsigned rate = 44100;
+    const unsigned rate = argc > 5 ? std::atoi(argv[5]) : 48000;
 
     SidTuneMeta meta; std::string err;
     if (!sid_probe(data.data(), data.size(), meta, err)) { std::fprintf(stderr, "probe: %s\n", err.c_str()); return 1; }

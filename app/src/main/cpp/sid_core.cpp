@@ -58,7 +58,7 @@ SidSession* sid_open(const uint8_t* data, size_t len, unsigned subsong, unsigned
 
     SidConfig cfg;
     cfg.frequency = rate;
-    cfg.samplingMethod = SidConfig::INTERPOLATE;
+    cfg.samplingMethod = SidConfig::RESAMPLE_INTERPOLATE;  // band-limited, like desktop sidplayfp
     cfg.sidEmulation = s->builder.get();
     if (!s->engine.config(cfg)) {
         err = s->engine.error();
