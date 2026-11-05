@@ -93,7 +93,7 @@ class SidRenderService : Service() {
     override fun onBind(intent: Intent?): IBinder = binder
 
     override fun onDestroy() {
-        executor.shutdown()
+        executor.shutdownNow()  // AnyFile unbound: stop a render nobody will play
         super.onDestroy()
     }
 

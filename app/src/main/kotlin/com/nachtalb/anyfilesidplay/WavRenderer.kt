@@ -2,6 +2,7 @@
 package com.nachtalb.anyfilesidplay
 
 import java.io.File
+import java.io.InterruptedIOException
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -35,6 +36,8 @@ internal object WavRenderer {
                 f.setLength(0)
                 f.write(ByteArray(44))
                 while (written < maxFrames) {
+                    // The client unbound (left the player): onDestroy interrupts this thread.
+                    if (Thread.currentThread().isInterrupted) throw InterruptedIOException("render cancelled")
                     var frames = SidNative.nativeRender(handle, chunk)
                     if (frames <= 0) break
                     frames = minOf(frames.toLong(), maxFrames - written).toInt()
