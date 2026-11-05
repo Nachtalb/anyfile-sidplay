@@ -22,11 +22,12 @@ import java.util.concurrent.Executors
  *
  * Options: "subsong" (1-based, 0/absent = the tune's start song), "seconds" (render length cap,
  * default 180, 1..1200). Tunes in the HVSC song-length database render at their real length
- * instead (up to 1200 s).
+ * instead (up to 1200 s). "stream" (boolean): for such tunes, return a pipe at once and render into it.
  */
 class SidRenderService : Service() {
 
-    private val executor = Executors.newSingleThreadExecutor()
+    // One thread per request: a subsong picked while another still streams must not queue behind it.
+    private val executor = Executors.newCachedThreadPool()
 
     private val binder = object : IConverter.Stub() {
         override fun convert(input: ParcelFileDescriptor?, options: Bundle?, callback: IConverterCallback?) {
@@ -36,11 +37,12 @@ class SidRenderService : Service() {
             }
             val subsong = options?.getInt(KEY_SUBSONG, 0)?.coerceAtLeast(0) ?: 0
             val seconds = options?.getInt(KEY_SECONDS, DEFAULT_SECONDS)?.takeIf { it in 1..MAX_SECONDS } ?: DEFAULT_SECONDS
-            executor.execute { run(input, subsong, seconds, callback) }
+            val stream = options?.getBoolean(KEY_STREAM, false) ?: false
+            executor.execute { run(input, subsong, seconds, stream, callback) }
         }
     }
 
-    private fun run(input: ParcelFileDescriptor, subsong: Int, seconds: Int, callback: IConverterCallback) {
+    private fun run(input: ParcelFileDescriptor, subsong: Int, seconds: Int, stream: Boolean, callback: IConverterCallback) {
         val out = File.createTempFile("sid_", ".wav", cacheDir)
         try {
             val tune = try {
@@ -50,6 +52,10 @@ class SidRenderService : Service() {
                 return
             }
             val lengthMs = songLength(tune, subsong)
+            if (stream && lengthMs != null) {
+                renderToPipe(tune, subsong, minOf(lengthMs, MAX_SECONDS * 1000L), callback)
+                return
+            }
             try {
                 WavRenderer.render(tune, subsong, if (lengthMs != null) MAX_SECONDS else seconds, out, lengthMs) { done, total ->
                     runCatching { callback.onProgress(done, total) }
@@ -66,6 +72,26 @@ class SidRenderService : Service() {
         } finally {
             runCatching { input.close() }
             out.delete()  // the client's dup'd fd keeps the data alive
+        }
+    }
+
+    /** Hands AnyFile the read end of a pipe right away and renders into it, so playback starts at once. */
+    private fun renderToPipe(tune: ByteArray, subsong: Int, lengthMs: Long, callback: IConverterCallback) {
+        val (read, write) = ParcelFileDescriptor.createPipe()
+        try {
+            callback.onResult(read)
+        } finally {
+            read.close()  // the client holds its own dup
+        }
+        try {
+            ParcelFileDescriptor.AutoCloseOutputStream(write).use { out ->
+                WavRenderer.renderStream(tune, subsong, lengthMs, out) { done, total ->
+                    runCatching { callback.onProgress(done, total) }
+                }
+            }
+        } catch (e: IOException) {
+            // The client closed its end (left the player) or the emulation failed; the pipe's EOF tells it.
+            Log.w(TAG, "stream ended early", e)
         }
     }
 
@@ -101,6 +127,7 @@ class SidRenderService : Service() {
         private const val TAG = "SidRenderService"
         const val KEY_SUBSONG = "subsong"
         const val KEY_SECONDS = "seconds"
+        const val KEY_STREAM = "stream"
         private const val DEFAULT_SECONDS = 180
         private const val MAX_SECONDS = 1200
         private const val MAX_TUNE_BYTES = 1 shl 20
