@@ -9,22 +9,25 @@ import java.nio.ByteOrder
 /**
  * Renders one subsong to a 16-bit PCM WAV file, streaming chunk by chunk.
  *
- * SID tunes have no length field, so rendering stops at [maxSeconds], or earlier once the
- * tune has gone silent for [SILENCE_SECONDS] (most tunes end by stopping all voices).
+ * SID tunes have no length field. With a known [lengthMs] (HVSC song-length database) the render
+ * is exactly that long. Otherwise it stops at [maxSeconds], or earlier once the tune has gone
+ * silent for [SILENCE_SECONDS] (most tunes end by stopping all voices).
  */
 internal object WavRenderer {
 
-    const val RATE = 44100
+    const val RATE = 48000
     private const val SILENCE_SECONDS = 5
     private const val SILENCE_LEVEL = 64      // |sample| at or below this counts as silence
 
-    fun render(tune: ByteArray, subsong: Int, maxSeconds: Int, out: File, progress: (Int, Int) -> Unit) {
+    fun render(tune: ByteArray, subsong: Int, maxSeconds: Int, out: File, lengthMs: Long? = null, progress: (Int, Int) -> Unit) {
         val handle = SidNative.nativeOpen(tune, subsong, RATE)
         try {
             val ch = SidNative.nativeChannels(handle)
             val chunk = ShortArray(RATE / 10 * ch)  // 100 ms
             val bytes = ByteBuffer.allocate(chunk.size * 2).order(ByteOrder.LITTLE_ENDIAN)
-            val maxFrames = maxSeconds.toLong() * RATE
+            val maxFrames = lengthMs?.let { minOf(it, maxSeconds * 1000L) * RATE / 1000 } ?: (maxSeconds.toLong() * RATE)
+            val totalSeconds = ((maxFrames + RATE - 1) / RATE).toInt()
+            val cutSilence = lengthMs == null
             var written = 0L
             var silentFrames = 0L
             var lastAudible = 0L  // frames up to the end of the last non-silent chunk
@@ -32,8 +35,9 @@ internal object WavRenderer {
                 f.setLength(0)
                 f.write(ByteArray(44))
                 while (written < maxFrames) {
-                    val frames = SidNative.nativeRender(handle, chunk)
+                    var frames = SidNative.nativeRender(handle, chunk)
                     if (frames <= 0) break
+                    frames = minOf(frames.toLong(), maxFrames - written).toInt()
                     bytes.clear()
                     var silent = true
                     for (i in 0 until frames * ch) {
@@ -44,11 +48,11 @@ internal object WavRenderer {
                     f.write(bytes.array(), 0, frames * ch * 2)
                     written += frames
                     if (silent) silentFrames += frames else { silentFrames = 0; lastAudible = written }
-                    if (written % RATE < frames) progress((written / RATE).toInt(), maxSeconds)
-                    if (silentFrames >= SILENCE_SECONDS.toLong() * RATE && lastAudible > 0) break
+                    if (written % RATE < frames) progress((written / RATE).toInt(), totalSeconds)
+                    if (cutSilence && silentFrames >= SILENCE_SECONDS.toLong() * RATE && lastAudible > 0) break
                 }
                 // Drop the trailing silence that ended the render (keep a short tail).
-                val keep = if (silentFrames >= SILENCE_SECONDS.toLong() * RATE) minOf(written, lastAudible + RATE / 2) else written
+                val keep = if (cutSilence && silentFrames >= SILENCE_SECONDS.toLong() * RATE) minOf(written, lastAudible + RATE / 2) else written
                 val dataBytes = keep * ch * 2
                 f.setLength(44 + dataBytes)
                 f.seek(0)

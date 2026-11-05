@@ -3,7 +3,7 @@
 A headless **SID (Commodore 64 music) → WAV render companion** for [AnyFile](https://github.com/Nachtalb/anyfile).
 
 No UI, no launcher icon. AnyFile binds its service over AIDL, hands it a `.sid` file, and gets back a
-44.1 kHz 16-bit PCM WAV of the chosen subsong, which it plays in its own audio player.
+48 kHz 16-bit PCM WAV of the chosen subsong, which it plays in its own audio player.
 
 ## Why a separate, GPL-licensed app
 
@@ -26,7 +26,9 @@ AnyFile  ──bind IConverter (shared AIDL)──►  SidRenderService (headles
   `residfp/sidversion.h` are pre-substituted from their `.in` templates.
 - `sid_core.{h,cpp}` – load a tune from memory, select a subsong, render PCM. No JNI, so the host
   harness `tools/sidrender.cpp` runs the same code.
-- `WavRenderer.kt` – streams PCM into a WAV file. Rendering stops at the `seconds` cap (default 180),
+- `WavRenderer.kt` – streams PCM into a WAV file (reSIDfp, band-limited resampling to 48 kHz, the
+  chip model from the tune header). Tunes listed in `assets/songlengths.txt` render at their real
+  length. Other tunes stop at the `seconds` cap (default 180),
   or after 5 s of silence once the tune has ended.
 - `*.aidl` – the shared companion contract, a verbatim copy of AnyFile's.
 
@@ -55,3 +57,7 @@ run `gradle :app:connectedDebugAndroidTest`.
 
 - This app: **GPL-2.0-or-later**. Full source is this repository.
 - libsidplayfp and libresidfp notices: `COPYING`, `AUTHORS*` and `README.md` in each vendored directory.
+- `app/src/main/assets/songlengths.txt`: the `md5=lengths` lines of the
+  [HVSC](https://www.hvsc.c64.org/) `DOCUMENTS/Songlengths.md5` (freely distributable with HVSC).
+  To refresh it after an HVSC update:
+  `curl -sL https://www.hvsc.c64.org/download/C64Music/DOCUMENTS/Songlengths.md5 | tr -d '\r' | grep -v '^;' | grep = > app/src/main/assets/songlengths.txt`
