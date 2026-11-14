@@ -50,7 +50,7 @@ android {
         buildConfigField("String", "BUILD_TIMESTAMP", "\"$buildTimestamp\"")
 
         // Same NDK as the other companions; CI installs this exact version via sdkmanager.
-        ndkVersion = "28.2.13676358"
+        ndkVersion = "30.0.16248370"
 
         ndk {
             // Release targets real devices (arm only). The emulator x86_64 slice is
@@ -87,7 +87,7 @@ android {
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
+            version = "4.1.2"
         }
     }
 
